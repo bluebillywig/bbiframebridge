@@ -1,0 +1,54 @@
+{
+  "name": "bbiframebridge",
+  "version": "1.0.0",
+  "description": "Blue Billywig Iframe Bridge",
+  "main": "dist/bbiframebridge.js",
+  "scripts": {
+    "clean": "rimraf .parcel-cache",
+    "build": "npm run clean && parcel build --target main",
+    "build-standalone": "npm run clean && parcel build --target standalone",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bluebillywig/bbiframebridge.git"
+  },
+  "keywords": [
+    "iframe",
+    "fullscreen",
+    "orientation"
+  ],
+  "author": "Janroel Koppen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bluebillywig/bbiframebridge/issues"
+  },
+  "homepage": "https://github.com/bluebillywig/bbiframebridge#readme",
+  "browserslist": [
+    "> 0.01%"
+  ],
+  "standalone": "dist/bbiframebridge-standalone.js",
+  "targets": {
+    "main": {
+      "context": "browser",
+      "distDir": "dist/",
+      "source": "src/index.js",
+      "publicUrl": ".",
+      "sourceMap": false
+    },
+    "standalone": {
+      "context": "browser",
+      "distDir": "dist/",
+      "source": "src/standalone.js",
+      "publicUrl": ".",
+      "sourceMap": false
+    }
+  },
+  "dependencies": {
+    "@swc/helpers": "0.4.14"
+  },
+  "devDependencies": {
+    "parcel": "~2.5.0",
+    "rimraf": "^3.0.2"
+  }
+}
