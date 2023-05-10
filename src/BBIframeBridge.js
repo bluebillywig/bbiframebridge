@@ -229,12 +229,16 @@ class BBIframeBridge {
 					const fsp = el[requestFullscreen]();
 					if (fsp && typeof fsp.then === 'function') { // promise
 						fsp.then(() => {
+							this._fullScreen = true;
 						}).catch((reason) => {});
+					} else {
+						this._fullScreen = true;						
 					}
 					ret = true;
 				} catch (er) {}
 			}
 		}
+		this._fullScreen = ret;
 
 		return ret;
 	}
@@ -278,7 +282,10 @@ class BBIframeBridge {
 					const fsp = document[exitFullscreen]();
 					if (fsp && typeof fsp.then === 'function') { // promise
 						fsp.then(() => {
+							this._fullScreen = false;
 						}).catch((reason) => {});
+					} else {
+						this._fullScreen = false;
 					}
 					ret = true;
 				} catch (er) {}
@@ -385,6 +392,11 @@ class BBIframeBridge {
 	 */
 	_onFullscreenChange (ev) {
 		const isRealFullscreen = !!(document.fullscreenElement || document.fullScreenElement || document.mozFullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.webkitFullScreenElement || document.msFullscreenElement);
+
+		if (!isRealFullscreen && this._fullScreen) { // esc-key / close button / pan gesture was used
+			this.cancelFullScreen(this._iframe);
+		}
+
 		ev && this.callChild('handleParentDocumentEvent', { eventType: 'fullscreenchange', eventProps: { isRealFullscreen } });
 	}
 
