@@ -238,7 +238,6 @@ class BBIframeBridge {
 				} catch (er) {}
 			}
 		}
-		this._fullScreen = ret;
 
 		return ret;
 	}
