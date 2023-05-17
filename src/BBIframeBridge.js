@@ -15,7 +15,9 @@ class BBIframeBridge {
 		this._iframeOrigin = '*';
 		if (this._iframe && this._iframe.src) {
 			const match = this._iframe.src.match(/^(https?:|)(\/\/[a-z0-9.-]+)\//i);
-			this._iframeOrigin = match[1] + match[2]; // e.g. 'https:' + '//demo.bbvms.com'
+			if (match) {
+				this._iframeOrigin = match[1] + match[2]; // e.g. 'https:' + '//demo.bbvms.com'
+			}
 		}
 
 		this._metaViewportLocked = false;
@@ -99,6 +101,34 @@ class BBIframeBridge {
 				console.warn('[BBIframeBridge] callChild failed to postMessage; ' + er);
 			}
 		}
+	}
+
+	localStorageSetItem (keyName, keyValue) {
+		try {
+			window.localStorage.setItem(keyName, keyValue);
+		} catch (er) {
+			this._inMemoryStorage[keyName] = keyValue;
+		}
+	}
+
+	localStorageGetItem (keyName) {
+		try {
+			return window.localStorage.getItem(keyName);
+		} catch (er) {
+			return this._inMemoryStorage[keyName] || null;
+		}
+	}
+
+	setLocation (value) {
+		window.location.href = value;
+	}
+
+	getLocation () {
+		return window.location.href;
+	}
+
+	getReferrer () {
+		return document.referrer;
 	}
 
 	/**
