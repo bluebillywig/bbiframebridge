@@ -20,11 +20,13 @@ class BBIframeBridge {
 			}
 		}
 
-		this._promises = {};
+		this._queueChild = {};
+		this._queueParent = {};
 		this._inMemoryStorage = {};
 		this._metaViewportLocked = false;
 		this._metaViewportContent = '';
 		this._oldStyle = null;
+		this._handshakeSucceededChild = false;
 
 		this._onKeyDownBound = this._onKeyDown.bind(this);
 		this._onMessageBound = this._onMessage.bind(this);
@@ -79,53 +81,98 @@ class BBIframeBridge {
 	}
 
 	/**
-	 * call method on parent frame
-	 * @param {String} methodName
-	 * @param {String} paramsJson optional, default null
-	 */
-	callParent (methodName, paramsJson = null) {
-		const pr = new Promise();
-		this._promises[methodName] = pr;
-		try {
-			window.parent.postMessage({ methodName, paramsJson }, '*');
-		} catch (er) {
-			console.warn('[BBIframeBridge] callParent failed to postMessage; ' + er);
-			pr.reject()
-		}
-
-		return pr;
-	}
-
-	/**
-	 * call method on child frame
+	 * call void method on parent frame
 	 * @param {String} methodName
 	 * @param {Object} params optional, default {}
 	 */
-	callChild (methodName, params = {}) {
-		if (this._iframe && this._iframe.contentWindow) {
-			const paramsJson = JSON.stringify(params);
+	callParent (methodName, params = {}) {
+		if (this._handshakeSucceededParent) {
 			try {
-				this._iframe.contentWindow.postMessage({ methodName, paramsJson }, this._iframeOrigin);
+				const paramsJson = (typeof params === 'string' && params.match(/^[{[]/)) ? params : JSON.stringify(params);
+				window.parent.postMessage({ methodName, paramsJson }, '*');
 			} catch (er) {
-				console.warn('[BBIframeBridge] callChild failed to postMessage; ' + er);
+				console.warn('[BBIframeBridge] callParent failed to postMessage; ' + er);
+			}
+		} else {
+			this._queueParent.push({ methodName, params });
+		}
+	}
+
+	/**
+	 * call void method on child frame
+	 * @param {String} methodName
+	 * @param {Object} params optional, default []
+	 */
+	callChild (methodName, params = []) {
+		if (this._handshakeSucceededChild) {
+			if (this._iframe && this._iframe.contentWindow) {
+				try {
+					const paramsJson = (typeof params === 'string' && params.match(/^[{[]/)) ? params : JSON.stringify(params);
+					this._iframe.contentWindow.postMessage({ methodName, paramsJson }, this._iframeOrigin);
+				} catch (er) {
+					console.warn('[BBIframeBridge] callChild failed to postMessage; ' + er);
+				}
+			}
+		} else {
+			this._queueChild.push({ methodName, params });
+		}
+	}
+
+	/**
+	 * set localStorage item
+	 * @param {String} key
+	 * @param {any?} value
+	 */
+	setLocalStorageItem (key, value) {
+		const keyValue = (key?.match(/^bbtl_/)) ? value : JSON.stringify(value); // NB!
+		try {
+			window.localStorage.setItem(key, keyValue);
+		} catch (er) {
+			this._inMemoryStorage[key] = keyValue;
+		}
+	}
+
+	/**
+	 * get localStorage item
+	 * @param {String} key
+	 * @return {any?} value or NULL
+	 */
+	getLocalStorageItem (key) {
+		let keyValue = null;
+		try {
+			keyValue = window.localStorage.getItem(key);
+		} catch (er) {
+			keyValue = this._inMemoryStorage[key] || null;
+		}
+		const value = (key.match(/^bbtl_/)) ? keyValue : JSON.parse(keyValue); // NB!
+		return value;
+	}
+
+	/**
+	 * get all localStorage items
+	 */
+	getLocalStorageItems () {
+		const items = [];
+
+		try {
+			const length = window.localStorage.length;
+			for (let i = 0; i < length; i++) {
+				const key = window.localStorage.key(i);
+				const keyValue = window.localStorage.getItem(key);
+				const value = (key.match(/^bbtl_/)) ? keyValue : JSON.parse(keyValue); // NB!
+				items.push({ key, value });
+			}
+		} catch (er) {
+			for (let key in this._inMemoryStorage) {
+				if (Object.hasOwn(this._inMemoryStorage, key)) {
+					const keyValue = this._inMemoryStorage[key];
+					const value = (key.match(/^bbtl_/)) ? keyValue : JSON.parse(keyValue); // NB!
+					items.push({ key, value });
+				}
 			}
 		}
-	}
 
-	localStorageSetItem (keyName, keyValue) {
-		try {
-			window.localStorage.setItem(keyName, keyValue);
-		} catch (er) {
-			this._inMemoryStorage[keyName] = keyValue;
-		}
-	}
-
-	localStorageGetItem (keyName) {
-		try {
-			return window.localStorage.getItem(keyName);
-		} catch (er) {
-			return this._inMemoryStorage[keyName] || null;
-		}
+		return items;
 	}
 
 	setLocation (value) {
@@ -355,13 +402,46 @@ class BBIframeBridge {
 		if (ev) {
 			if (typeof ev.data === 'string') { // legacy
 				switch (ev.data) {
-				case 'handshake':
-					if (this._iframe && this._iframe.contentWindow) {
+				case 'handshake': // "SYN"
+					if (ev.source === this._iframe?.contentWindow) { // child
 						try {
 							this._iframe.contentWindow.postMessage('handshakeSucceeded', this._iframeOrigin);
 						} catch (er) {
-							console.warn('[BBIframeBridge] _onMessage failed to postMessage; ' + er);
+							console.warn('[BBIframeBridge] _onMessage failed to postMessage handshakeSucceeded; ' + er);
 						}
+					} else if (ev.source === window.parent) { // parent
+						try {
+							window.parent.postMessage('handshakeSucceeded', '*');
+						} catch (er) {
+							console.warn('[BBIframeBridge] _onMessage failed to postMessage handshakeSucceeded; ' + er);
+						}
+					}
+					// eslint-disable-next-line no-fallthrough
+				case 'handshakeSucceeded': // "ACK"
+					if (ev.source === this._iframe?.contentWindow) { // child
+						// push localStorage
+						try {
+							const items = this.getLocalStorageItems();
+							this._iframe.contentWindow.postMessage({ methodName: 'setLocalStorageItems', paramsJson: JSON.stringify([items]) }, this._iframeOrigin);
+						} catch (er) {
+							console.warn('[BBIframeBridge] _onMessage failed to postMessage setLocalStorageItems; ' + er);
+						}
+	
+						// handle queued calls
+						this._handshakeSucceededChild = true;
+						while (this._queueChild.length > 0) {
+							const qitem = this._queueChild.shift();
+							this.callChild(qitem.methodName, qitem.params);
+						}
+					} else if (ev.source === window.parent) { // parent
+						// handle queued calls
+						this._handshakeSucceededParent = true;
+						while (this._queueParent.length > 0) {
+							const qitem = this._queueParent.shift();
+							this.callParent(qitem.methodName, qitem.params);
+						}
+					} else {
+						console.warn(`[BBIframeBridge] _onMessage unknown source...`);
 					}
 					break;
 				case 'fullbrowser':
@@ -378,7 +458,7 @@ class BBIframeBridge {
 					break;
 				}
 			} else if (
-				typeof ev.data === 'object' &&
+				typeof ev.data === 'object' && // modern
 				typeof ev.data.methodName === 'string' && // valid
 				ev.data.methodName.indexOf('_' !== 0) && // public
 				typeof this[ev.data.methodName] === 'function' // existing
@@ -387,24 +467,13 @@ class BBIframeBridge {
 				try {
 					params = JSON.parse(ev.data.paramsJson);
 				} catch (er) {}
-				if (ev.data.methodName !== 'return') {
+				if (ev.data.methodName !== 'return') { // return reserved for future use
 					let returnValue;
 					if (Array.isArray(params)) {
 						returnValue = this[ev.data.methodName].apply(this, params);
 					} else {
 						returnValue = this[ev.data.methodName](params);
 					}
-					if (typeof returnValue !== 'undefined') {
-						if (ev.data.returnToParent) {
-							this.callParent('return', { returnKey: ev.data.methodName, returnValue });
-						} else {
-							this.callChild('return', { returnKey: ev.data.methodName, returnValue });
-						}
-					}
-				} else { // return
-					const returnKey = params.returnKey || params[0];
-					const returnValue = params.returnValue || params[1];
-					this._promises[returnKey]?.resolve(returnValue);
 				}
 			}
 		}
@@ -471,7 +540,7 @@ class BBIframeBridge {
 		const iframes = document.querySelectorAll('iframe');
 		iframes.forEach((currentValue, currentIndex, listObj) => {
 			const match = currentValue.src && currentValue.src.match(bbRegex);
-			if (match !== null && match.length > 1) {
+			if (match !== null && match.length > 1 || true) {
 				// create bridge
 				const bridge = new BBIframeBridge(currentValue);
 				window.bluebillywig.BBIframeBridges.push(bridge);
