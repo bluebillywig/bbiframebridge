@@ -7,6 +7,7 @@
     "clean": "rimraf .parcel-cache",
     "build": "npm run clean && parcel build --target main",
     "build-standalone": "npm run clean && parcel build --target standalone",
+    "prepare": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

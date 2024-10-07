@@ -7,4 +7,4 @@
 
 import BBIframeBridge from './BBIframeBridge'
 
-module.exports = { BBIframeBridge }
+export default BBIframeBridge;
