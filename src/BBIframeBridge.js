@@ -124,11 +124,19 @@ class BBIframeBridge {
 	 * @param {any?} value
 	 */
 	setLocalStorageItem (key, value) {
-		const keyValue = (key?.match(/^bbtl_/)) ? value : JSON.stringify(value); // NB!
-		try {
-			window.localStorage.setItem(key, keyValue);
-		} catch (er) {
-			this._inMemoryStorage[key] = keyValue;
+		if (value != null) {
+			const keyValue = (key?.match(/^bbtl_/)) ? value : JSON.stringify(value); // NB!
+			try {
+				window.localStorage.setItem(key, keyValue);
+			} catch (er) {
+				this._inMemoryStorage[key] = keyValue;
+			}
+		} else { // null => remove
+			try {
+				window.localStorage.removeItem(key)
+			} catch (er) {
+				delete this._inMemoryStorage[key];
+			}
 		}
 	}
 
@@ -144,7 +152,7 @@ class BBIframeBridge {
 		} catch (er) {
 			keyValue = this._inMemoryStorage[key] || null;
 		}
-		const value = (key.match(/^bbtl_/)) ? keyValue : JSON.parse(keyValue); // NB!
+		const value = (key.match(/^bbtl_/) || keyValue == null) ? keyValue : JSON.parse(keyValue); // NB!
 		return value;
 	}
 
