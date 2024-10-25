@@ -23,14 +23,13 @@ jobs:
         if: github.event_name == 'push'
         uses: styfle/cancel-workflow-action@0.11.0
         with:
-          access_token: ${{ secrets.GLOBAL_ACTION_TOKEN }}
+          access_token: ${{ github.token }}
 
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.GLOBAL_ACTION_TOKEN }}
-          submodules: recursive
+          token: ${{ github.token }}
 
       - name: Check if on latest release branch
         if: github.event_name == 'push'
