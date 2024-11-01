@@ -46,7 +46,8 @@
     }
   },
   "dependencies": {
-    "@swc/helpers": "0.4.14"
+    "@swc/helpers": "0.4.14",
+    "regenerator-runtime": "~0.14.1"
   },
   "devDependencies": {
     "parcel": "~2.5.0",

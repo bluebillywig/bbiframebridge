@@ -44,12 +44,10 @@ class BBIframeBridge {
 		document.addEventListener('MSFullscreenChange', this._onFullscreenChangeBound);
 		document.addEventListener('mozfullscreenchange', this._onFullscreenChangeBound);
 
-		if (this._iframe && this._iframe.contentWindow) {
-			try {
-				this._iframe.contentWindow.postMessage('handshake', '*'); // this._iframeOrigin);
-			} catch (er) {
-				console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
-			}
+		try {
+			this._iframe?.contentWindow?.postMessage('handshake', '*'); // this._iframeOrigin);
+		} catch (er) {
+			console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
 		}
 	}
 
@@ -105,17 +103,35 @@ class BBIframeBridge {
 	 */
 	callChild (methodName, params = []) {
 		if (this._handshakeSucceededChild) {
-			if (this._iframe && this._iframe.contentWindow) {
-				try {
-					const paramsJson = (typeof params === 'string' && params.match(/^[{[]/)) ? params : JSON.stringify(params);
-					this._iframe.contentWindow.postMessage({ methodName, paramsJson }, this._iframeOrigin);
-				} catch (er) {
-					console.warn('[BBIframeBridge] callChild failed to postMessage; ' + er);
-				}
+			try {
+				const paramsJson = (typeof params === 'string' && params.match(/^[{[]/)) ? params : JSON.stringify(params);
+				this._iframe?.contentWindow?.postMessage({ methodName, paramsJson }, this._iframeOrigin);
+			} catch (er) {
+				console.warn('[BBIframeBridge] callChild failed to postMessage; ' + er);
 			}
 		} else {
 			this._queueChild.push({ methodName, params });
 		}
+	}
+
+	// private
+	callChildPromise = async function (methodName, params = []) {
+		const childPromise = new Promise((resolve) => {
+			const onMessage = (ev) => {
+				if (ev?.data?.methodName === 'return' && ev.data.returnKey === methodName) {
+					window.removeEventListener('message', onMessage); // mimic options.once
+					resolve(ev.data.returnValue);
+				}
+			};
+			window.addEventListener('message', onMessage);
+		});
+		const localPromise = new Promise((resolve) => {
+			window.setTimeout(() => {
+				resolve(null); // default
+			}, 240);
+		});
+		this.callChild(methodName, params);
+		return Promise.race([childPromise, localPromise]);
 	}
 
 	/**
@@ -481,6 +497,11 @@ class BBIframeBridge {
 						returnValue = this[ev.data.methodName].apply(this, params);
 					} else {
 						returnValue = this[ev.data.methodName](params);
+					}
+					if (typeof returnValue !== 'undefined') {
+						try {
+							this._iframe?.contentWindow?.postMessage({methodName: 'return', returnKey: ev.data.methodName, returnValue}, this._iframeOrigin);
+						} catch (_) {}
 					}
 				}
 			}
