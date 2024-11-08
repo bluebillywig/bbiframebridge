@@ -1,0 +1,104 @@
+# Automatically deploy to acc when changes are pushed to a release branch. This happens after a new release branch is
+# pushed, or when changes are pushed to an existing release branch.
+#
+# Manually deploy a branch to acc. This is typically used to roll back a release branch.
+#
+name: Deploy to test
+
+on:
+  push:
+    branches:
+      - release/v[0-9]+.[0-9]+
+  workflow_dispatch:
+
+env:
+  ENVIRONMENT: test
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cancel previous runs
+        if: github.event_name == 'push'
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Validate release version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "${{ github.event.inputs.version }}" =~ ^(v|)?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            RELEASE_TAG="v${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.${BASH_REMATCH[4]}"
+            REF="refs/tags/${RELEASE_TAG}"
+
+            if ! git rev-parse -q --verify ${REF} >/dev/null; then
+              echo "::error::Release ${RELEASE_TAG} does not exist."
+              false
+            fi
+
+            echo "REF=${REF}" >>$GITHUB_ENV
+            git checkout -q ${REF}
+          else
+            echo "::error::Invalid release version '${{ github.event.inputs.version }}'. Use [v{x}.{y}.{z}|{x}.{y}.{z}]"
+            false
+          fi
+
+      - name: Check if on latest release branch
+        if: github.event_name == 'push'
+        run: |
+          LATEST_RELEASE_BRANCH=$(for branch in $(git for-each-ref --format='%(refname)' 'refs/remotes/origin/release/v*'); do
+            mergebase=$(diff -u <(git rev-list --first-parent origin/master) <(git rev-list --first-parent ${branch}) | grep -E '^ ' | head -1 | awk '{print $1}')
+            count=$(git rev-list --count ${mergebase}..origin/master);
+            echo -e "${count} ${branch}"
+          done | sort -n | head -1 | awk '{print $2}')
+
+          echo "::debug::LATEST_RELEASE_BRANCH: ${LATEST_RELEASE_BRANCH##refs/remotes/origin/}"
+          echo "::debug::GITHUB_REF: ${GITHUB_REF##refs/heads/}"
+
+          if [ "${LATEST_RELEASE_BRANCH##refs/remotes/origin/}" != "${GITHUB_REF##refs/heads/}" ]; then
+            echo "::error::Not deploying, push not to latest release branch"
+
+            # Exit action with error
+            false
+          fi
+
+      - name: Annotate revision artifact
+        run: |
+          echo "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"$(git rev-parse ${GITHUB_REF})\"}" >revision.json
+          echo "::notice::revision.json: $(cat revision.json)"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          aws-access-key-id: '${{ secrets.AWS_ACCESS_KEY_ID }}'
+          aws-secret-access-key: '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
+          aws-region: eu-west-1
+
+      # Use Node version specified in .nvmrc
+      - name: Use Node
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Set version
+        run: echo "VERSION=$( date +%Y%m%d.%H%M%S )" >>$GITHUB_ENV
+
+      - name: Build
+        run: |
+          # Self-hosted runners can keep these folders around between runs, wipe them so we always build latest
+          rm -rf build/
+          rm -rf dist/
+          npm ci && npm run clean && npm run build-standalone
+
+      - name: Deploy
+        run: |
+          aws s3 sync --cache-control public,max-age=1209600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/${{ env.VERSION }}/
+          aws s3 sync --metadata-directive REPLACE --cache-control public,max-age=600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/latest/
