@@ -20,8 +20,8 @@ class BBIframeBridge {
 			}
 		}
 
-		this._queueChild = {};
-		this._queueParent = {};
+		this._queueChild = [];
+		this._queueParent = [];
 		this._inMemoryStorage = {};
 		this._metaViewportLocked = false;
 		this._metaViewportContent = '';
