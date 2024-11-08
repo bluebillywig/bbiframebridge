@@ -115,7 +115,7 @@ class BBIframeBridge {
 	}
 
 	// private
-	callChildPromise = async function (methodName, params = []) {
+	async callChildPromise (methodName, params = []) {
 		const childPromise = new Promise((resolve) => {
 			const onMessage = (ev) => {
 				if (ev?.data?.methodName === 'return' && ev.data.returnKey === methodName) {
