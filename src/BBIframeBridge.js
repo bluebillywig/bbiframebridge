@@ -23,6 +23,7 @@ class BBIframeBridge {
 		this._queueChild = [];
 		this._queueParent = [];
 		this._inMemoryStorage = {};
+		this._isectObserver = null;
 		this._metaViewportLocked = false;
 		this._metaViewportContent = '';
 		this._oldStyle = null;
@@ -48,6 +49,16 @@ class BBIframeBridge {
 			this._iframe?.contentWindow?.postMessage('handshake', '*'); // this._iframeOrigin);
 		} catch (er) {
 			console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
+		}
+
+		if (window.IntersectionObserver) { // Direct support
+			this._setupIsectObserver();
+		} else { // No direct support; polyfill
+			import('intersection-observer').then(() => {
+				this._setupIsectObserver();
+			}).catch(() => {
+				console.warn('[BBIframeBridge] Failed to polyfill IntersectionObserver');
+			});
 		}
 	}
 
@@ -406,6 +417,24 @@ class BBIframeBridge {
 		this.cancelFullBrowser(el);
 
 		return ret;
+	}
+
+	_setupIsectObserver () {
+		this._isectObserver?.disconnect();
+		if (this._iframe) {
+			this._isectObserver = new IntersectionObserver((entries) => {
+				let isIntersecting = null;
+				entries.forEach((entry) => {
+					if (entry.target === this._iframe) {
+						isIntersecting = entry.isIntersecting;
+					}
+				});
+				this.callChild('setInView', [isIntersecting]);
+			}, {
+				threshold: 0.5
+			});
+			this._isectObserver.observe(this._iframe);
+		}
 	}
 
 	/**
