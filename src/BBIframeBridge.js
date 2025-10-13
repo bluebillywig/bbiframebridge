@@ -246,14 +246,10 @@ class BBIframeBridge {
 
 		if (normalizedWidth !== null) {
 			this._iframe.style.width = normalizedWidth;
-		} else {
-			this._iframe.style.removeProperty('width');
 		}
 
 		if (normalizedHeight !== null) {
 			this._iframe.style.height = normalizedHeight;
-		} else {
-			this._iframe.style.removeProperty('height');
 		}
 
 		return true;
