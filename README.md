@@ -23,6 +23,24 @@ If you look up the bridge instance for an iframe you want to control (e.g. windo
 ```
 const br = bluebillywig.BBIframeBridges[0];
 const playoutData = await br.callChildPromise('getPlayoutData');
+
+// let the iframe suggest new dimensions
+br.setIframeSize({ width: '100%', height: 480 }); // width is optional, be careful with 100%
+```
+
+### Child → parent resize event
+Inside the iframe, send a `setIframeSize` message once the player has computed its preferred dimensions. The parent bridge will pick it up and apply the new size.
+
+```js
+// object payload (recommended)
+window.parent.postMessage({
+        methodName: 'setIframeSize',
+        paramsJson: JSON.stringify([{ width: '100%', height: 480 }]) // width is optional, be careful with 100%
+}, '*');
+
+// legacy string payloads are still supported
+window.parent.postMessage('setIframeSize {"width":"100%","height":480}', '*');
+window.parent.postMessage('setIframeSize 100% 480', '*');
 ```
 
 ## Troubleshooting

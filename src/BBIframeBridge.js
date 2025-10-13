@@ -223,6 +223,56 @@ class BBIframeBridge {
 	}
 
 	/**
+	 * update iframe size based on values provided by child
+	 * @param {Number|String|Object} width width value or object containing width/height
+	 * @param {Number|String|null} height optional height value when width provided directly
+	 * @return {Boolean} success
+	 */
+	setIframeSize (width, height = null) {
+		if (!this._iframe) {
+			return false;
+		}
+
+		let iframeWidth = width;
+		let iframeHeight = height;
+
+		if (width && typeof width === 'object') {
+			iframeWidth = width.width;
+			iframeHeight = Object.hasOwn(width, 'height') ? width.height : iframeHeight;
+		}
+
+		const normalizedWidth = this._normalizeDimension(iframeWidth);
+		const normalizedHeight = this._normalizeDimension(iframeHeight);
+
+		if (normalizedWidth !== null) {
+			this._iframe.style.width = normalizedWidth;
+		} else {
+			this._iframe.style.removeProperty('width');
+		}
+
+		if (normalizedHeight !== null) {
+			this._iframe.style.height = normalizedHeight;
+		} else {
+			this._iframe.style.removeProperty('height');
+		}
+
+		return true;
+	}
+
+	/**
+	 * @access private
+	 */
+	_normalizeDimension (value) {
+		if (value == null || value === '') {
+			return null;
+		}
+		if (typeof value === 'number') {
+			return `${value}px`;
+		}
+		return `${value}`;
+	}
+
+	/**
 	 * enter fullbrowser
 	 * @param {Object} element optional, default window
 	 * @return {Boolean} success
@@ -454,6 +504,32 @@ class BBIframeBridge {
 	_onMessage (ev) {
 		if (ev) {
 			if (typeof ev.data === 'string') { // legacy
+				if (ev.data.toLowerCase().startsWith('setiframesize')) {
+					const payload = ev.data.slice('setIframeSize'.length).trim().replace(/^[:|\s]+/, '');
+					let width = null;
+					let height = null;
+					if (payload) {
+						try {
+							const parsed = JSON.parse(payload);
+							if (Array.isArray(parsed)) {
+								[width, height] = parsed;
+							} else if (parsed && typeof parsed === 'object') {
+								width = parsed.width ?? null;
+								height = parsed.height ?? null;
+							}
+						} catch (_) {
+							const parts = payload.split(/[|,;\s\t]+/).filter(Boolean);
+							if (parts.length > 0) {
+								width = parts[0];
+							}
+							if (parts.length > 1) {
+								height = parts[1];
+							}
+						}
+					}
+					this.setIframeSize(width, height);
+					return;
+				}
 				switch (ev.data) {
 				case 'handshake': // "SYN"
 					if (ev.source === this._iframe?.contentWindow) { // child
