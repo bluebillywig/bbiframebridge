@@ -223,26 +223,24 @@ class BBIframeBridge {
 	}
 
 	/**
-	 * update iframe size based on values provided by child
-	 * @param {Number|String|Object} width width value or object containing width/height
-	 * @param {Number|String|null} height optional height value when width provided directly
+	 * update iframe size based on dimensions provided by child
+	 * @param {Object} dimensions object containing optional width and/or height properties
+	 * @param {Number|String} dimensions.width optional width value
+	 * @param {Number|String} dimensions.height optional height value
 	 * @return {Boolean} success
 	 */
-	setIframeSize (width, height = null) {
+	setIframeSize (dimensions) {
 		if (!this._iframe) {
 			return false;
 		}
 
-		let iframeWidth = width;
-		let iframeHeight = height;
-
-		if (width && typeof width === 'object') {
-			iframeWidth = width.width;
-			iframeHeight = Object.hasOwn(width, 'height') ? width.height : iframeHeight;
+		if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+			console.warn('[BBIframeBridge] setIframeSize requires an object with width and/or height properties');
+			return false;
 		}
 
-		const normalizedWidth = this._normalizeDimension(iframeWidth);
-		const normalizedHeight = this._normalizeDimension(iframeHeight);
+		const normalizedWidth = this._normalizeDimension(dimensions.width);
+		const normalizedHeight = this._normalizeDimension(dimensions.height);
 
 		if (normalizedWidth !== null) {
 			this._iframe.style.width = normalizedWidth;
@@ -256,16 +254,52 @@ class BBIframeBridge {
 	}
 
 	/**
+	 * Normalize and validate dimension values to prevent CSS injection
 	 * @access private
+	 * @param {Number|String} value dimension value to normalize
+	 * @return {String|null} normalized CSS dimension or null if invalid
 	 */
 	_normalizeDimension (value) {
 		if (value == null || value === '') {
 			return null;
 		}
+
+		// Handle numeric values - convert to pixels
 		if (typeof value === 'number') {
+			if (!isFinite(value) || value < 0) {
+				console.warn('[BBIframeBridge] Invalid dimension: negative or non-finite numbers not allowed');
+				return null;
+			}
 			return `${value}px`;
 		}
-		return `${value}`;
+
+		// Handle string values with validation
+		if (typeof value === 'string') {
+			const trimmed = value.trim();
+
+			// Allowed CSS units - whitelist approach
+			const validPattern = /^(\d+(?:\.\d+)?)(px|%|em|rem|vh|vw|vmin|vmax)$/i;
+			const match = trimmed.match(validPattern);
+
+			if (!match) {
+				console.warn('[BBIframeBridge] Invalid dimension format: must be a number followed by a valid CSS unit (px, %, em, rem, vh, vw, vmin, vmax)');
+				return null;
+			}
+
+			const numericValue = parseFloat(match[1]);
+			const unit = match[2].toLowerCase();
+
+			// Additional validation: no negative values
+			if (numericValue < 0) {
+				console.warn('[BBIframeBridge] Invalid dimension: negative values not allowed');
+				return null;
+			}
+
+			return `${numericValue}${unit}`;
+		}
+
+		console.warn('[BBIframeBridge] Invalid dimension type: must be a number or string');
+		return null;
 	}
 
 	/**
@@ -500,32 +534,6 @@ class BBIframeBridge {
 	_onMessage (ev) {
 		if (ev) {
 			if (typeof ev.data === 'string') { // legacy
-				if (ev.data.toLowerCase().startsWith('setiframesize')) {
-					const payload = ev.data.slice('setIframeSize'.length).trim().replace(/^[:|\s]+/, '');
-					let width = null;
-					let height = null;
-					if (payload) {
-						try {
-							const parsed = JSON.parse(payload);
-							if (Array.isArray(parsed)) {
-								[width, height] = parsed;
-							} else if (parsed && typeof parsed === 'object') {
-								width = parsed.width ?? null;
-								height = parsed.height ?? null;
-							}
-						} catch (_) {
-							const parts = payload.split(/[|,;\s\t]+/).filter(Boolean);
-							if (parts.length > 0) {
-								width = parts[0];
-							}
-							if (parts.length > 1) {
-								height = parts[1];
-							}
-						}
-					}
-					this.setIframeSize(width, height);
-					return;
-				}
 				switch (ev.data) {
 				case 'handshake': // "SYN"
 					if (ev.source === this._iframe?.contentWindow) { // child
