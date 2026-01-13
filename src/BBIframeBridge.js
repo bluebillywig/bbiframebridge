@@ -440,6 +440,10 @@ class BBIframeBridge {
 			}
 		}
 
+		// Notify child of fullscreen state (for fullbrowser mode where no native event fires)
+		this._fullScreen = true;
+		this.callChild('handleParentDocumentEvent', { eventType: 'fullscreenchange', eventProps: { isRealFullscreen: ret, isFullscreen: true } });
+
 		return ret;
 	}
 
@@ -495,6 +499,10 @@ class BBIframeBridge {
 		// window.parent && window.parent.postMessage('cancelfullscr', '*'); // NB since we ourselves might be iframed too!
 
 		this.cancelFullBrowser(el);
+
+		// Notify child of fullscreen state
+		this._fullScreen = false;
+		this.callChild('handleParentDocumentEvent', { eventType: 'fullscreenchange', eventProps: { isRealFullscreen: false, isFullscreen: false } });
 
 		return ret;
 	}
@@ -573,21 +581,27 @@ class BBIframeBridge {
 							const qitem = this._queueParent.shift();
 							this.callParent(qitem.methodName, qitem.params);
 						}
-					} else {
-						console.warn(`[BBIframeBridge] _onMessage unknown source...`);
-					}
+					} // else: message from another iframe on the page - ignore silently
 					break;
 				case 'fullbrowser':
-					this.enterFullScreen(this._iframe); // this.enterFullBrowser(this._iframe);
+					if (ev.source === this._iframe?.contentWindow) {
+						this.enterFullScreen(this._iframe);
+					}
 					break;
 				case 'fullbrowser-off':
-					this.cancelFullScreen(this._iframe); // this.cancelFullBrowser(this._iframe);
+					if (ev.source === this._iframe?.contentWindow) {
+						this.cancelFullScreen(this._iframe);
+					}
 					break;
 				case 'fullscr':
-					this.enterFullScreen(this._iframe);
+					if (ev.source === this._iframe?.contentWindow) {
+						this.enterFullScreen(this._iframe);
+					}
 					break;
 				case 'cancelfullscr':
-					this.cancelFullScreen(this._iframe);
+					if (ev.source === this._iframe?.contentWindow) {
+						this.cancelFullScreen(this._iframe);
+					}
 					break;
 				}
 			} else if (
