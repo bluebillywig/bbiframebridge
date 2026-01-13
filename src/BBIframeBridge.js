@@ -51,15 +51,10 @@ class BBIframeBridge {
 			console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
 		}
 
-		if (window.IntersectionObserver) { // Direct support
-			this._setupIsectObserver();
-		} else { // No direct support; polyfill
-			import('intersection-observer').then(() => {
-				this._setupIsectObserver();
-			}).catch(() => {
-				console.warn('[BBIframeBridge] Failed to polyfill IntersectionObserver');
-			});
+		if (!window.IntersectionObserver) { // No direct support; polyfill
+			require('intersection-observer');
 		}
+		this._setupIsectObserver();
 	}
 
 	/**
