@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<script type="module" src="./standalone.js"></script>
+		<style>
+			.wrapper {
+				/* display: flex; */
+				gap: 16px;
+			}
+		</style>
+	</head>
+	<body>
+		<h2>Multiple iframes - the correct iframe should resize for transcript/fullscreen</h2>
+		<!-- <iframe src="https://testsuite.acc.bbvms.com/p/puc_inview_play/c/7571.html?inheritDimensions=true" width="768" height="432"></iframe> -->
+		<div class="wrapper">
+			<p>When using transcript below player, do not set `?inheritDimensions=true` on the iframe source when using the iFrame bridge.</p>
+			<iframe title="Video player (example 1)" src="https://testsuite.acc.bbvms.com/p/puc_with_transcript_below/c/9674.html" width="1200" height="768" name="iframe1"></iframe>
+			<p>Hello world!</p>
+
+			<iframe title="Video player (example 2)" src="https://testsuite.acc.bbvms.com/p/puc_with_transcript_below/c/9352.html" width="1200" height="768"></iframe>
+		</div>
+
+		<!-- <script src="https://testsuite.acc.bbvms.com/p/puc_with_transcript_below/c/9674.js?_bbp5_target=dev"></script> -->
+	</body>
+</html>
