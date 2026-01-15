@@ -4,6 +4,7 @@
   "description": "Blue Billywig Iframe Bridge",
   "main": "dist/bbiframebridge.js",
   "scripts": {
+    "start": "parcel serve src/index.html --https",
     "clean": "rimraf .parcel-cache",
     "build": "npm run clean && parcel build --target main",
     "build-standalone": "npm run clean && parcel build --target standalone",

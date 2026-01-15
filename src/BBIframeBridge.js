@@ -28,6 +28,7 @@ class BBIframeBridge {
 		this._metaViewportContent = '';
 		this._oldStyle = null;
 		this._handshakeSucceededChild = false;
+		this._handshakeSucceededParent = false;
 
 		this._onKeyDownBound = this._onKeyDown.bind(this);
 		this._onMessageBound = this._onMessage.bind(this);
@@ -541,10 +542,11 @@ class BBIframeBridge {
 	 */
 	_onMessage (ev) {
 		if (ev) {
+			const isChildIframe = (this._iframe && ev.source === this._iframe.contentWindow);
 			if (typeof ev.data === 'string') { // legacy
 				switch (ev.data) {
 				case 'handshake': // "SYN"
-					if (ev.source === this._iframe?.contentWindow) { // child
+					if (isChildIframe) { // child
 						try {
 							this._iframe.contentWindow.postMessage('handshakeSucceeded', this._iframeOrigin);
 						} catch (er) {
@@ -559,7 +561,7 @@ class BBIframeBridge {
 					}
 					// eslint-disable-next-line no-fallthrough
 				case 'handshakeSucceeded': // "ACK"
-					if (ev.source === this._iframe?.contentWindow) { // child
+					if (isChildIframe) { // child
 						// push localStorage
 						try {
 							const items = this.getLocalStorageItems();
@@ -584,22 +586,22 @@ class BBIframeBridge {
 					} // else: message from another iframe on the page - ignore silently
 					break;
 				case 'fullbrowser':
-					if (ev.source === this._iframe?.contentWindow) {
+					if (isChildIframe) {
 						this.enterFullScreen(this._iframe);
 					}
 					break;
 				case 'fullbrowser-off':
-					if (ev.source === this._iframe?.contentWindow) {
+					if (isChildIframe) {
 						this.cancelFullScreen(this._iframe);
 					}
 					break;
 				case 'fullscr':
-					if (ev.source === this._iframe?.contentWindow) {
+					if (isChildIframe) {
 						this.enterFullScreen(this._iframe);
 					}
 					break;
 				case 'cancelfullscr':
-					if (ev.source === this._iframe?.contentWindow) {
+					if (isChildIframe) {
 						this.cancelFullScreen(this._iframe);
 					}
 					break;
@@ -607,8 +609,9 @@ class BBIframeBridge {
 			} else if (
 				typeof ev.data === 'object' && // modern
 				typeof ev.data.methodName === 'string' && // valid
-				ev.data.methodName.indexOf('_' !== 0) && // public
-				typeof this[ev.data.methodName] === 'function' // existing
+				ev.data.methodName.indexOf('_') !== 0 && // public
+				typeof this[ev.data.methodName] === 'function' && // existing
+				isChildIframe
 			) {
 				let params = ev.data.params;
 				try {
