@@ -36,5 +36,3 @@ Single class handling all bridge functionality:
 Uses Parcel with two targets defined in `package.json`:
 - `main`: CommonJS output for npm consumption
 - `standalone`: Self-bootstrapping browser bundle for CDN
-
-The `intersection-observer` polyfill is conditionally loaded via synchronous `require()` only when `window.IntersectionObserver` is unavailable.
