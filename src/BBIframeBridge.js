@@ -51,9 +51,6 @@ class BBIframeBridge {
 			console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
 		}
 
-		if (!window.IntersectionObserver) { // No direct support; polyfill
-			require('intersection-observer');
-		}
 		this._setupIsectObserver();
 	}
 
@@ -307,7 +304,7 @@ class BBIframeBridge {
 
 		document.addEventListener('keydown', this._onKeyDownBound);
 
-		// Lock zoom 
+		// Lock zoom
 		let metaViewport = document.querySelector('head meta[name="viewport"]');
 		if (!metaViewport) {
 			metaViewport = document.createElement('meta');
@@ -428,7 +425,7 @@ class BBIframeBridge {
 							this._fullScreen = true;
 						}).catch((reason) => {});
 					} else {
-						this._fullScreen = true;						
+						this._fullScreen = true;
 					}
 					ret = true;
 				} catch (er) {}
@@ -504,7 +501,7 @@ class BBIframeBridge {
 
 	_setupIsectObserver () {
 		this._isectObserver?.disconnect();
-		if (this._iframe) {
+		if (this._iframe && typeof window.IntersectionObserver === 'function') {
 			this._isectObserver = new IntersectionObserver((entries) => {
 				let isIntersecting = null;
 				entries.forEach((entry) => {
@@ -562,7 +559,7 @@ class BBIframeBridge {
 						} catch (er) {
 							console.warn('[BBIframeBridge] _onMessage failed to postMessage setLocalStorageItems; ' + er);
 						}
-	
+
 						// handle queued calls
 						this._handshakeSucceededChild = true;
 						while (this._queueChild.length > 0) {
