@@ -47,12 +47,11 @@
     }
   },
   "dependencies": {
-    "intersection-observer": "^0.12.2",
     "@swc/helpers": "^0.5.0",
     "regenerator-runtime": "^0.14.1"
   },
   "devDependencies": {
-    "parcel": "^2.12.0",
+    "parcel": "^2.16.3",
     "rimraf": "^4.0.0"
   }
 }
