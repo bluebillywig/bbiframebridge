@@ -30,6 +30,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     # github-actions only supports default-days — Dependabot rejects the
     # semver-* cooldown properties for this ecosystem.
     cooldown:
