@@ -56,22 +56,26 @@ window.parent.postMessage({
 Messages from the iframe can only invoke this fixed set of bridge methods:
 `setIframeSize`, `setLocalStorageItem`, `getLocalStorageItem`, `getLocalStorageItems`,
 `getLocation`, `getReferrer`, `onBlueBillywigInstanceReady`. Anything else is dropped with a
-console warning.
+console warning — except `return`, which is the reply channel for `callChildPromise` and is skipped
+silently.
 
 Notably `setLocation` is **not** callable over postMessage — it assigns `window.location.href`, so
 reaching it by name from the iframe would be a redirect primitive. Calling it directly on the
-instance (`br.setLocation(...)`) still works; only the message path is restricted. Fullscreen is
-driven by the separate string protocol (`fullscr`, `cancelfullscr`, …), which is unchanged.
+instance (`br.setLocation(...)`) still works; only the message path is restricted.
 
 This restriction applies only to the child → parent direction. `callChild` / `callChildPromise`
 still reach the whole [player API](https://support.bluebillywig.com/player-api/methods/) as
 documented above.
 
-The bridge also re-validates `event.origin` against the iframe's origin on every message, which
-catches an iframe navigated elsewhere after load. This currently runs **warn-only**: mismatches are
-logged but still handled, so existing integrations keep working. Set `bridge._enforceOrigin = true`
-to drop them instead. A relative or protocol-relative `iframe.src` leaves no origin to compare
-against — the bridge warns at construction when that happens.
+The bridge also re-validates `event.origin` against the iframe's origin on every message **from the
+child**, which catches an iframe navigated elsewhere after load. The fullscreen string protocol
+(`fullscr`, `cancelfullscr`, `fullbrowser`, …) keeps its wire names but is now subject to that same
+check. Messages arriving from the *parent* direction are not origin-checked.
+
+This currently runs **warn-only**: mismatches are logged but still handled, so existing integrations
+keep working. Set `bridge._enforceOrigin = true` to drop them instead. An `iframe.src` that yields
+no usable origin (a relative URL, or a `data:`/sandboxed frame) leaves nothing to compare against
+and disables the check for that bridge — it warns at construction when that happens.
 
 ## Development
 

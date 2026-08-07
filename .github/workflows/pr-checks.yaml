@@ -1,0 +1,30 @@
+# Runs the unit suite on every pull request.
+#
+# The repo previously had no test job at all ("test": "echo no test specified && exit 1"), so the
+# postMessage security tests added in #19020 would have rotted silently -- someone editing
+# CHILD_COMMANDS or the origin check would have had no gate to fail.
+name: Pull request checks
+
+on:
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: bluebillywig/gh-workflows/.github/actions/checkout@v1
+
+      - name: Setup Node
+        uses: bluebillywig/gh-workflows/.github/actions/setup-node@v1
+        with:
+          cache: true
+          cache-node-modules: true
+
+      - name: Install
+        run: npm ci
+
+      - name: Run tests
+        run: npm test

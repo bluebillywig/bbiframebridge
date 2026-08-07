@@ -145,10 +145,162 @@ describe('BBIframeBridge origin re-validation', () => {
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining('warn-only mode'));
 	});
 
+	// The old regex /^(https?:|)(\/\/[a-z0-9.-]+)\// produced '//host' here -- not a legal
+	// targetOrigin, so postMessage throws SyntaxError and the handshake never reaches the child.
+	it('derives a full origin from a protocol-relative src', () => {
+		const iframe = makeIframe('//demo.bbvms.com/p/default/c/123.html');
+		bridge = makeBridge(iframe);
+
+		expect(bridge._iframeOrigin).not.toMatch(/^\/\//);
+		expect(bridge._iframeOrigin).toBe(new URL('//demo.bbvms.com/x', window.location.href).origin);
+		// Would have thrown into the constructor's catch if the origin were malformed.
+		expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('failed to postMessage'));
+	});
+
+	// The old regex's [a-z0-9.-]+ could not match a port, so it silently fell back to '*' and
+	// disabled origin validation for every dev/staging/on-prem deployment.
+	it('derives an origin from a src with a port', () => {
+		bridge = makeBridge(makeIframe('https://demo.bbvms.com:8443/p/default/c/123.html'));
+		expect(bridge._iframeOrigin).toBe('https://demo.bbvms.com:8443');
+	});
+
 	it('warns when iframe.src yields no usable origin', () => {
-		bridge = makeBridge(makeIframe('/relative/player.html'));
+		bridge = makeBridge(makeIframe('data:text/html,<p>x'));
 		expect(bridge._iframeOrigin).toBe('*');
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining('inbound origin validation is disabled'));
+	});
+
+	// A bridge is constructed for every iframe on the page, including src-less ad slots.
+	it('does not warn for a src-less iframe', () => {
+		bridge = makeBridge(makeIframe(''));
+		expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('inbound origin validation is disabled'));
+	});
+});
+
+describe('BBIframeBridge handshake resilience', () => {
+	let bridge;
+
+	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
+	afterEach(() => {
+		if (bridge) { bridge.exit(); bridge = null; }
+		jest.restoreAllMocks();
+	});
+
+	// Origin-gating the handshake would leave _handshakeSucceededChild false forever: every
+	// callChild queues indefinitely and fullscreen dies, with nothing saying the bridge is dead.
+	it('completes the handshake even when the origin no longer matches, under enforcement', () => {
+		const iframe = makeIframe();
+		bridge = new BBIframeBridge(iframe);
+		bridge._enforceOrigin = true;
+
+		bridge._onMessage({ data: 'handshakeSucceeded', source: iframe.contentWindow, origin: 'https://elsewhere.test' });
+
+		expect(bridge._handshakeSucceededChild).toBe(true);
+	});
+
+	it('drains the child queue once the handshake lands', () => {
+		const iframe = makeIframe();
+		bridge = new BBIframeBridge(iframe);
+		bridge.callChild('play');
+		expect(bridge._queueChild).toHaveLength(1);
+
+		bridge._onMessage({ data: 'handshakeSucceeded', source: iframe.contentWindow, origin: IFRAME_ORIGIN });
+
+		expect(bridge._queueChild).toHaveLength(0);
+		expect(iframe.contentWindow.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ methodName: 'play' }), IFRAME_ORIGIN
+		);
+	});
+
+	// Fullscreen is a real state change, so it keeps the origin check the handshake gives up.
+	it('still drops fullscreen commands on an origin mismatch under enforcement', () => {
+		const iframe = makeIframe();
+		bridge = new BBIframeBridge(iframe);
+		bridge._enforceOrigin = true;
+		const enterFullScreen = jest.spyOn(bridge, 'enterFullScreen').mockImplementation(() => {});
+
+		bridge._onMessage({ data: 'fullscr', source: iframe.contentWindow, origin: 'https://evil.test' });
+
+		expect(enterFullScreen).not.toHaveBeenCalled();
+	});
+});
+
+describe('BBIframeBridge callParent targetOrigin', () => {
+	let bridge;
+
+	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
+	afterEach(() => {
+		if (bridge) { bridge.exit(); bridge = null; }
+		jest.restoreAllMocks();
+	});
+
+	it('broadcasts with "*" until the parent has identified itself', () => {
+		const post = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
+		bridge = new BBIframeBridge(makeIframe());
+		bridge._handshakeSucceededParent = true;
+
+		bridge.callParent('somethingHappened', {});
+
+		expect(post).toHaveBeenCalledWith(expect.any(Object), '*');
+	});
+
+	// document.referrer is NOT the parent's origin -- on a top-level page it is whatever site
+	// linked the user here, and targeting that would make the browser drop every message.
+	it('targets the origin the parent reported via ev.origin', () => {
+		const post = jest.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
+		bridge = new BBIframeBridge(makeIframe());
+
+		bridge._onMessage({ data: 'handshakeSucceeded', source: window.parent, origin: 'https://host.example.com' });
+		bridge.callParent('somethingHappened', {});
+
+		expect(bridge._parentOrigin).toBe('https://host.example.com');
+		expect(post).toHaveBeenCalledWith(expect.any(Object), 'https://host.example.com');
+	});
+
+	it('ignores an opaque parent origin rather than targeting the string "null"', () => {
+		bridge = new BBIframeBridge(makeIframe());
+		bridge._onMessage({ data: 'handshakeSucceeded', source: window.parent, origin: 'null' });
+		expect(bridge._parentOrigin).toBeNull();
+	});
+});
+
+describe('BBIframeBridge reply channel', () => {
+	let bridge;
+
+	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
+	afterEach(() => {
+		if (bridge) { bridge.exit(); bridge = null; }
+		jest.restoreAllMocks();
+	});
+
+	it.each([
+		['getLocation', []],
+		['getReferrer', []],
+		['getLocalStorageItems', []],
+		['getLocalStorageItem', ['bbtl_x']]
+	])('dispatches %s and replies to the iframe origin', (methodName, params) => {
+		const iframe = makeIframe();
+		bridge = makeBridge(iframe);
+
+		bridge._onMessage(childEvt(bridge, { methodName, paramsJson: JSON.stringify(params) }));
+
+		expect(iframe.contentWindow.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ methodName: 'return', returnKey: methodName }),
+			IFRAME_ORIGIN
+		);
+	});
+
+	it('accepts onBlueBillywigInstanceReady', () => {
+		const iframe = makeIframe();
+		bridge = makeBridge(iframe);
+
+		bridge._onMessage(childEvt(bridge, {
+			methodName: 'onBlueBillywigInstanceReady',
+			paramsJson: JSON.stringify(['inst-1', 'Player'])
+		}));
+
+		expect(bridge._instanceId).toBe('inst-1');
+		expect(bridge._className).toBe('Player');
 	});
 });
 
