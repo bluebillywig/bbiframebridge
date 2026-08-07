@@ -75,6 +75,18 @@ describe('BBIframeBridge child->parent command dispatch', () => {
 		expect(spy).not.toHaveBeenCalled();
 	});
 
+	// Caught by running a real player against a real bridge, not by this suite. The skin posts
+	// iframeReady on every iframe embed; master ignored it silently via the dynamic-dispatch
+	// typeof test, so warning about it would mean a console line per page load for every customer.
+	it.each(['return', 'iframeReady'])('drops the non-command %s SILENTLY', (methodName) => {
+		const iframe = makeIframe();
+		bridge = makeBridge(iframe);
+
+		bridge._onMessage(childEvt(bridge, { methodName, paramsJson: '[]' }));
+
+		expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('not callable'));
+	});
+
 	it('ignores messages from a window that is not the child iframe', () => {
 		const iframe = makeIframe();
 		bridge = makeBridge(iframe);

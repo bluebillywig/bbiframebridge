@@ -28,6 +28,18 @@ const CHILD_COMMANDS = new Set([
 	'onBlueBillywigInstanceReady'
 ]);
 
+/*
+ * Messages that arrive shaped like a command but are notifications the bridge does not act on.
+ * They are dropped silently rather than warned about, because they are expected traffic:
+ *  - 'return': the reply channel, consumed by callChildPromise
+ *  - 'iframeReady': the skin announces itself on every iframe embed
+ *    (standardplayer-skin-svelte/src/lib/controllers/iframe-bridge.ts). There has never been an
+ *    iframeReady method here, so the old dynamic dispatch ignored it via its
+ *    `typeof this[name] === 'function'` test -- silently. Warning about it would put a line in
+ *    every customer's console on every page load.
+ */
+const SILENT_NON_COMMANDS = new Set(['return', 'iframeReady']);
+
 class BBIframeBridge {
 	/**
 	 * constructor
@@ -722,8 +734,7 @@ class BBIframeBridge {
 			) {
 				const methodName = ev.data.methodName;
 				if (!CHILD_COMMANDS.has(methodName)) {
-					// 'return' is the reply channel, handled by callChildPromise -- not a command.
-					if (methodName !== 'return') {
+					if (!SILENT_NON_COMMANDS.has(methodName)) {
 						console.warn('[BBIframeBridge] command "' + methodName + '" is not callable from the child iframe; dropped');
 					}
 					return;
