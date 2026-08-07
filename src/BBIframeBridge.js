@@ -5,6 +5,41 @@
  * language: ES6 (2015)
  */
 
+/*
+ * Commands the child iframe may invoke on the parent bridge via postMessage.
+ *
+ * Replaces dynamic `this[ev.data.methodName]` dispatch, which exposed every public method on the
+ * class. Deliberately absent:
+ *  - setLocation: assigns window.location.href, i.e. a redirect / `javascript:` primitive
+ *  - exit: lets a child tear down its own bridge
+ *  - callParent / callChild: turn the bridge into a message relay
+ * Direct calls on the instance (br.setLocation(...)) are unaffected -- only the message path is
+ * restricted. Fullscreen is driven by the legacy string protocol below, not by name dispatch.
+ */
+const CHILD_COMMANDS = new Set([
+	'setIframeSize',
+	'setLocalStorageItem',
+	'getLocalStorageItem',
+	'getLocalStorageItems',
+	'getLocation',
+	'getReferrer',
+	'onBlueBillywigInstanceReady'
+]);
+
+/**
+ * Origin of the page hosting this bridge, for use as an outgoing targetOrigin towards the parent.
+ * Returns '*' when it cannot be determined, because narrowing to a guess would silently drop
+ * messages the bridge has always delivered.
+ * @access private
+ */
+function resolveParentTargetOrigin () {
+	try {
+		if (document.referrer) return new URL(document.referrer).origin;
+	} catch (er) { /* fall through */ }
+	console.warn('[BBIframeBridge] parent origin unknown, falling back to targetOrigin "*"');
+	return '*';
+}
+
 class BBIframeBridge {
 	/**
 	 * constructor
@@ -19,6 +54,15 @@ class BBIframeBridge {
 				this._iframeOrigin = match[1] + match[2]; // e.g. 'https:' + '//demo.bbvms.com'
 			}
 		}
+		if (this._iframeOrigin === '*' && this._iframe) {
+			// A relative or protocol-relative src leaves us with no origin to compare against, which
+			// silently disables the inbound origin check below.
+			console.warn('[BBIframeBridge] could not derive an origin from iframe.src; inbound origin validation is disabled for this bridge');
+		}
+
+		// Warn-only by default (#19020): origin mismatches are logged but still handled, so live
+		// integrations keep working while we collect telemetry. Flip once the warn traffic is known.
+		this._enforceOrigin = false;
 
 		this._queueChild = [];
 		this._queueParent = [];
@@ -47,7 +91,9 @@ class BBIframeBridge {
 		document.addEventListener('mozfullscreenchange', this._onFullscreenChangeBound);
 
 		try {
-			this._iframe?.contentWindow?.postMessage('handshake', '*'); // this._iframeOrigin);
+			// _iframeOrigin is itself '*' when it could not be derived, so this is never stricter
+			// than the old unconditional '*'.
+			this._iframe?.contentWindow?.postMessage('handshake', this._iframeOrigin);
 		} catch (er) {
 			console.warn('[BBIframeBridge] constructor failed to postMessage; ' + er);
 		}
@@ -91,7 +137,7 @@ class BBIframeBridge {
 		if (this._handshakeSucceededParent) {
 			try {
 				const paramsJson = (typeof params === 'string' && params.match(/^[{[]/)) ? params : JSON.stringify(params);
-				window.parent.postMessage({ methodName, paramsJson }, '*');
+				window.parent.postMessage({ methodName, paramsJson }, resolveParentTargetOrigin());
 			} catch (er) {
 				console.warn('[BBIframeBridge] callParent failed to postMessage; ' + er);
 			}
@@ -122,6 +168,9 @@ class BBIframeBridge {
 	async callChildPromise (methodName, params = []) {
 		const childPromise = new Promise((resolve) => {
 			const onMessage = (ev) => {
+				// Without this check any window on the page could post a 'return' and decide what
+				// this promise resolves to.
+				if (!this._isTrustedChildMessage(ev)) return;
 				if (ev?.data?.methodName === 'return' && ev.data.returnKey === methodName) {
 					window.removeEventListener('message', onMessage); // mimic options.once
 					resolve(ev.data.returnValue);
@@ -532,9 +581,35 @@ class BBIframeBridge {
 	/**
 	 * @access private
 	 */
+	/**
+	 * Whether a message genuinely came from the child iframe this bridge owns.
+	 *
+	 * ev.source is set by the browser and cannot be forged, but it survives a navigation: an iframe
+	 * moved to a hostile origin after load keeps the same contentWindow. So the origin is
+	 * re-validated on every message rather than trusted once from iframe.src at construction.
+	 *
+	 * @access private
+	 * @param {MessageEvent} ev
+	 * @return {Boolean}
+	 */
+	_isTrustedChildMessage (ev) {
+		if (!this._iframe || ev.source !== this._iframe.contentWindow) return false;
+		// Nothing to compare against -- already warned about at construction.
+		if (this._iframeOrigin === '*') return true;
+		// Same-document and some test environments deliver an empty origin.
+		if (typeof ev.origin !== 'string' || ev.origin === '') return true;
+		if (ev.origin === this._iframeOrigin) return true;
+
+		console.warn('[BBIframeBridge] message origin "' + ev.origin + '" does not match iframe origin "' + this._iframeOrigin + '"' + (this._enforceOrigin ? '; dropped' : '; allowing in warn-only mode'));
+		return !this._enforceOrigin;
+	}
+
+	/**
+	 * @access private
+	 */
 	_onMessage (ev) {
 		if (ev) {
-			const isChildIframe = (this._iframe && ev.source === this._iframe.contentWindow);
+			const isChildIframe = this._isTrustedChildMessage(ev);
 			if (typeof ev.data === 'string') { // legacy
 				switch (ev.data) {
 				case 'handshake': // "SYN"
@@ -546,7 +621,7 @@ class BBIframeBridge {
 						}
 					} else if (ev.source === window.parent) { // parent
 						try {
-							window.parent.postMessage('handshakeSucceeded', '*');
+							window.parent.postMessage('handshakeSucceeded', resolveParentTargetOrigin());
 						} catch (er) {
 							console.warn('[BBIframeBridge] _onMessage failed to postMessage handshakeSucceeded; ' + er);
 						}
@@ -600,27 +675,33 @@ class BBIframeBridge {
 				}
 			} else if (
 				typeof ev.data === 'object' && // modern
+				ev.data !== null &&
 				typeof ev.data.methodName === 'string' && // valid
-				ev.data.methodName.indexOf('_') !== 0 && // public
-				typeof this[ev.data.methodName] === 'function' && // existing
 				isChildIframe
 			) {
+				const methodName = ev.data.methodName;
+				if (!CHILD_COMMANDS.has(methodName)) {
+					// 'return' is the reply channel, handled by callChildPromise -- not a command.
+					if (methodName !== 'return') {
+						console.warn('[BBIframeBridge] command "' + methodName + '" is not callable from the child iframe; dropped');
+					}
+					return;
+				}
+
 				let params = ev.data.params;
 				try {
 					params = JSON.parse(ev.data.paramsJson);
 				} catch (er) {}
-				if (ev.data.methodName !== 'return') { // return reserved for future use
-					let returnValue;
-					if (Array.isArray(params)) {
-						returnValue = this[ev.data.methodName].apply(this, params);
-					} else {
-						returnValue = this[ev.data.methodName](params);
-					}
-					if (typeof returnValue !== 'undefined') {
-						try {
-							this._iframe?.contentWindow?.postMessage({methodName: 'return', returnKey: ev.data.methodName, returnValue}, this._iframeOrigin);
-						} catch (_) {}
-					}
+				let returnValue;
+				if (Array.isArray(params)) {
+					returnValue = this[methodName].apply(this, params);
+				} else {
+					returnValue = this[methodName](params);
+				}
+				if (typeof returnValue !== 'undefined') {
+					try {
+						this._iframe?.contentWindow?.postMessage({methodName: 'return', returnKey: methodName, returnValue}, this._iframeOrigin);
+					} catch (_) {}
 				}
 			}
 		}

@@ -51,6 +51,34 @@ window.parent.postMessage({
 
 **Security Note**: The bridge validates all dimension values to prevent CSS injection attacks. Only numeric values with standard CSS units (px, %, em, rem, vh, vw, vmin, vmax) are accepted.
 
+### What a child iframe may call on the parent
+
+Messages from the iframe can only invoke this fixed set of bridge methods:
+`setIframeSize`, `setLocalStorageItem`, `getLocalStorageItem`, `getLocalStorageItems`,
+`getLocation`, `getReferrer`, `onBlueBillywigInstanceReady`. Anything else is dropped with a
+console warning.
+
+Notably `setLocation` is **not** callable over postMessage — it assigns `window.location.href`, so
+reaching it by name from the iframe would be a redirect primitive. Calling it directly on the
+instance (`br.setLocation(...)`) still works; only the message path is restricted. Fullscreen is
+driven by the separate string protocol (`fullscr`, `cancelfullscr`, …), which is unchanged.
+
+This restriction applies only to the child → parent direction. `callChild` / `callChildPromise`
+still reach the whole [player API](https://support.bluebillywig.com/player-api/methods/) as
+documented above.
+
+The bridge also re-validates `event.origin` against the iframe's origin on every message, which
+catches an iframe navigated elsewhere after load. This currently runs **warn-only**: mismatches are
+logged but still handled, so existing integrations keep working. Set `bridge._enforceOrigin = true`
+to drop them instead. A relative or protocol-relative `iframe.src` leaves no origin to compare
+against — the bridge warns at construction when that happens.
+
+## Development
+
+```
+npm test        # jest + jsdom
+```
+
 ## Troubleshooting
 If installing the bbiframebridge dependency fails -- ```npm install``` tries to build the package from source in your build environment -- you can always resort to including the pre-built stand-alone version:  
 ```
