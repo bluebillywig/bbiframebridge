@@ -38,7 +38,9 @@ class BBIframeBridge {
 		// URL, not a regex. The previous /^(https?:|)(\/\/[a-z0-9.-]+)\// yielded '//host' for a
 		// protocol-relative src -- not a legal targetOrigin, so postMessage throws SyntaxError on it
 		// -- and failed to match a host with a port at all, silently disabling origin validation for
-		// every non-default-port embed. URL resolves relative srcs against the document too.
+		// every non-default-port embed. URL also resolves a relative src against the document, so
+		// those now validate normally instead of falling back to '*'; only an opaque or unparseable
+		// src leaves us with nothing to compare.
 		this._iframeOrigin = '*';
 		if (this._iframe && this._iframe.src) {
 			try {
@@ -616,7 +618,9 @@ class BBIframeBridge {
 	 */
 	_isTrustedChildMessage (ev) {
 		if (!this._iframe || ev.source !== this._iframe.contentWindow) return false;
-		// Nothing to compare against -- already warned about at construction.
+		// No origin was derivable from iframe.src, so there is nothing to compare against. Warned
+		// about at construction only when there WAS an src -- a src-less iframe reaches here
+		// silently, by design.
 		if (this._iframeOrigin === '*') return true;
 		// Hand-constructed events (tests, jsdom) carry an empty origin. Real browsers always set it:
 		// a serialized origin, or the literal string 'null' for an opaque one -- which is handled by

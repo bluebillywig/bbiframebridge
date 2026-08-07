@@ -73,9 +73,13 @@ child**, which catches an iframe navigated elsewhere after load. The fullscreen 
 check. Messages arriving from the *parent* direction are not origin-checked.
 
 This currently runs **warn-only**: mismatches are logged but still handled, so existing integrations
-keep working. Set `bridge._enforceOrigin = true` to drop them instead. An `iframe.src` that yields
-no usable origin (a relative URL, or a `data:`/sandboxed frame) leaves nothing to compare against
-and disables the check for that bridge — it warns at construction when that happens.
+keep working. Set `bridge._enforceOrigin = true` to drop them instead.
+
+The origin is resolved from `iframe.src` with `URL`, so relative and protocol-relative srcs and
+hosts with a port all validate normally. Only an **opaque or unparseable** src (`data:`, a sandboxed
+frame, anything `URL` rejects) leaves nothing to compare against and disables the check for that
+bridge — it warns at construction when that happens. A src-less iframe also skips validation, but
+silently: a bridge is constructed for every iframe on the page, so warning there would be noise.
 
 ## Development
 

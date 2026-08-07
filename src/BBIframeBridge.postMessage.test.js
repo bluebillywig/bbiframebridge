@@ -30,8 +30,10 @@ describe('BBIframeBridge child->parent command dispatch', () => {
 
 	beforeEach(() => { warn = jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	it('derives the iframe origin from src and dispatches an allowlisted command', () => {
@@ -101,8 +103,10 @@ describe('BBIframeBridge origin re-validation', () => {
 
 	beforeEach(() => { warn = jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	// The scenario in the ticket: iframe.src mutated after load. ev.source still matches, so only a
@@ -182,8 +186,10 @@ describe('BBIframeBridge handshake resilience', () => {
 
 	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	// Origin-gating the handshake would leave _handshakeSucceededChild false forever: every
@@ -230,8 +236,10 @@ describe('BBIframeBridge callParent targetOrigin', () => {
 
 	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	it('broadcasts with "*" until the parent has identified itself', () => {
@@ -269,8 +277,10 @@ describe('BBIframeBridge reply channel', () => {
 
 	beforeEach(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	it.each([
@@ -308,8 +318,10 @@ describe('BBIframeBridge callChildPromise', () => {
 	let bridge;
 
 	afterEach(() => {
-		if (bridge) { bridge.exit(); bridge = null; }
+		// Restore BEFORE exit: one test spies on `exit` itself, and calling the mock would skip
+		// removeEventListener and leak the window/document listeners into later tests.
 		jest.restoreAllMocks();
+		if (bridge) { bridge.exit(); bridge = null; }
 	});
 
 	it('resolves from the real child iframe', async () => {
