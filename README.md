@@ -51,6 +51,42 @@ window.parent.postMessage({
 
 **Security Note**: The bridge validates all dimension values to prevent CSS injection attacks. Only numeric values with standard CSS units (px, %, em, rem, vh, vw, vmin, vmax) are accepted.
 
+### What a child iframe may call on the parent
+
+Messages from the iframe can only invoke this fixed set of bridge methods:
+`setIframeSize`, `setLocalStorageItem`, `getLocalStorageItem`, `getLocalStorageItems`,
+`getLocation`, `getReferrer`, `onBlueBillywigInstanceReady`. Anything else is dropped with a
+console warning — except `return`, which is the reply channel for `callChildPromise` and is skipped
+silently.
+
+Notably `setLocation` is **not** callable over postMessage — it assigns `window.location.href`, so
+reaching it by name from the iframe would be a redirect primitive. Calling it directly on the
+instance (`br.setLocation(...)`) still works; only the message path is restricted.
+
+This restriction applies only to the child → parent direction. `callChild` / `callChildPromise`
+still reach the whole [player API](https://support.bluebillywig.com/player-api/methods/) as
+documented above.
+
+The bridge also re-validates `event.origin` against the iframe's origin on every message **from the
+child**, which catches an iframe navigated elsewhere after load. The fullscreen string protocol
+(`fullscr`, `cancelfullscr`, `fullbrowser`, …) keeps its wire names but is now subject to that same
+check. Messages arriving from the *parent* direction are not origin-checked.
+
+This currently runs **warn-only**: mismatches are logged but still handled, so existing integrations
+keep working. Set `bridge._enforceOrigin = true` to drop them instead.
+
+The origin is resolved from `iframe.src` with `URL`, so relative and protocol-relative srcs and
+hosts with a port all validate normally. Only an **opaque or unparseable** src (`data:`, a sandboxed
+frame, anything `URL` rejects) leaves nothing to compare against and disables the check for that
+bridge — it warns at construction when that happens. A src-less iframe also skips validation, but
+silently: a bridge is constructed for every iframe on the page, so warning there would be noise.
+
+## Development
+
+```
+npm test        # jest + jsdom
+```
+
 ## Troubleshooting
 If installing the bbiframebridge dependency fails -- ```npm install``` tries to build the package from source in your build environment -- you can always resort to including the pre-built stand-alone version:  
 ```

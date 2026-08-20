@@ -1,0 +1,35 @@
+# Runs the unit suite on every pull request.
+#
+# The repo previously had no test job at all ("test": "echo no test specified && exit 1"), so the
+# postMessage security tests added in #19020 would have rotted silently -- someone editing
+# CHILD_COMMANDS or the origin check would have had no gate to fail.
+#
+# Uses stock actions rather than bluebillywig/gh-workflows composites: that repo is not resolvable
+# from this one, and the deploy workflows here use actions/checkout + actions/setup-node too.
+name: Pull request checks
+
+on:
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install
+        # `npm ci` runs the `prepare` script, which builds via parcel -- keep it, so a change that
+        # breaks the build fails here too.
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
