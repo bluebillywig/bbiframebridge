@@ -19,6 +19,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      actions: write # cancel-workflow-action
+      id-token: write # npm OIDC trusted publishing
+
     steps:
       - name: Cancel previous runs
         if: github.event_name == 'push'
@@ -62,12 +67,13 @@ jobs:
           aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           aws-region: eu-west-1
 
-      # Use Node version specified in .nvmrc
+      # Note: not .nvmrc (v18.18 -> npm 9.8.1); npm OIDC trusted publishing needs npm >=11.5.1
       - name: Use Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
+          node-version: "24"
           cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Set version
         run: |
@@ -90,5 +96,10 @@ jobs:
           aws s3 sync --cache-control public,max-age=1209600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/${{ env.BUILDTAG }}/
           aws s3 sync --metadata-directive REPLACE --cache-control public,max-age=600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/latest/
 
+      # Auth is npm OIDC trusted publishing -- no NODE_AUTH_TOKEN. Requires a one-time
+      # setup on npmjs.com: bbiframebridge -> Settings -> Trusted Publisher -> GitHub Actions,
+      # org=bluebillywig, repo=bbiframebridge, workflow=deploy-to-prod.yaml
       - name: Deploy to NPM registry
-        run: npm publish --provenance --access public
+        run: |
+          npm --version # OIDC trusted publishing requires npm >=11.5.1
+          npm publish --access public
