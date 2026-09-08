@@ -1,0 +1,49 @@
+# Dependabot version updates. Copied from the BB baseline template at
+# bluebillywig/gh-workflows:template-workflows/dependabot.yml (ADO #19329).
+#
+# `cooldown` holds back PRs for newly published versions so a freshly compromised
+# release ages out before we pull it in. 3 days matches GitHub's current default
+# for version updates; it is set explicitly so the value survives a change to that
+# default. Cooldown applies to version updates only, never to security updates.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+      semver-minor-days: 3
+      semver-patch-days: 3
+    groups:
+      # Minor and patch bumps land in one PR; majors are excluded from the group
+      # so they get their own. A runtime change is not reliably a major, so read
+      # the grouped PR rather than rubber-stamping it.
+      minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # github-actions supports only `default-days` — the semver-* cooldown keys
+    # have no effect for this ecosystem.
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns:
+          - '*'
+    ignore:
+      # First-party actions are referenced by a floating tag (@v1) BY DESIGN — the
+      # tag is protected at the source rather than pinned by consumers, so there is
+      # nothing here for Dependabot to bump. With no `versions` or `update-types`,
+      # this ignores ALL updates for `bluebillywig/*`, which is the intent.
+      - dependency-name: 'bluebillywig/*'
