@@ -21,12 +21,12 @@ jobs:
     steps:
       - name: Cancel previous runs
         if: github.event_name == 'push'
-        uses: styfle/cancel-workflow-action@0.11.0
+        uses: styfle/cancel-workflow-action@0.13.1
         with:
           access_token: ${{ github.token }}
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ github.token }}
@@ -56,7 +56,7 @@ jobs:
           echo "::notice::revision.json: $(cat revision.json)"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1-node16
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           aws-access-key-id: "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
@@ -64,7 +64,7 @@ jobs:
 
       # Use Node version specified in .nvmrc
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: "npm"
