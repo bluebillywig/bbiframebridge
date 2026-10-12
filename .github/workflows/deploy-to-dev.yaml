@@ -64,3 +64,18 @@ jobs:
         run: |
           aws s3 sync --cache-control public,max-age=1209600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/${{ env.VERSION }}/
           aws s3 sync --metadata-directive REPLACE --cache-control public,max-age=600 dist/ s3://dub.cdn.bluebillywig.com/${{ env.ENVIRONMENT }}/scripts/bbiframebridge/latest/
+
+      # Dev deploy failures go to the dev-ci Chat space, and are failures-only: a dev
+      # deploy fires on every push to master, so a card per success is the volume that
+      # gets a space muted. Deliberately no webhook_url: the release space must not be
+      # reachable from the dev path. deploy_result is job.status, not the literal
+      # 'failure' — that is what keeps the action's failures-only guard live rather
+      # than making it a tautology; drop the `if:` below and the action sees 'success'
+      # and stays quiet, instead of posting a card on a green run. ADO #20847.
+      - name: Post-deploy (failure notification)
+        if: failure()
+        uses: bluebillywig/gh-workflows/.github/actions/post-deploy@v1
+        with:
+          environment: dev
+          deploy_result: ${{ job.status }}
+          dev_webhook_url: ${{ secrets.DEV_CI_GOOGLE_CHAT_WEBHOOK }}
