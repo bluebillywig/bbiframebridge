@@ -51,7 +51,7 @@
     "regenerator-runtime": "^0.14.1"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.25.0",
+    "@babel/preset-env": "^8.0.7",
     "babel-jest": "^30.5.2",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
