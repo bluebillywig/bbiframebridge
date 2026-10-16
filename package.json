@@ -56,6 +56,6 @@
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
     "parcel": "^2.16.3",
-    "rimraf": "^4.0.0"
+    "rimraf": "^6.1.3"
   }
 }
