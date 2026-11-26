@@ -19,10 +19,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    # The AWS role trusts this Environment: the OIDC sub is
+    # repo:bluebillywig/bbiframebridge:environment:prod.
+    environment: prod
+
     permissions:
       contents: read
       actions: write # cancel-workflow-action
-      id-token: write # npm OIDC trusted publishing
+      id-token: write # AWS role and npm trusted publishing, both OIDC
 
     steps:
       - name: Cancel previous runs
@@ -61,10 +65,9 @@ jobs:
           echo "::notice::revision.json: $(cat revision.json)"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1-node16
+        uses: bluebillywig/gh-workflows/.github/actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-west-1
 
       # Note: not .nvmrc (v18.18 -> npm 9.8.1); npm OIDC trusted publishing needs npm >=11.5.1
